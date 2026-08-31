@@ -1,0 +1,26 @@
+---
+- name: Linux Patching Test
+  hosts: linux_servers
+  become: true
+
+  tasks:
+
+    - name: Show hostname
+      ansible.builtin.command:
+        cmd: hostname
+      register: hostname_result
+      changed_when: false
+
+    - name: Display hostname
+      ansible.builtin.debug:
+        var: hostname_result.stdout
+
+    - name: Update packages
+      ansible.builtin.package:
+        name: "*"
+        state: latest
+      register: patch_result
+
+    - name: Show patch result
+      ansible.builtin.debug:
+        msg: "Patching completed. Changed={{ patch_result.changed }}"
