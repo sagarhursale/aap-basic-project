@@ -1,6 +1,6 @@
 ---
 - name: Ubuntu Linux Patching
-  hosts: "{{ target_hosts }}"
+  hosts: all
   become: true
   gather_facts: true
 
@@ -17,8 +17,8 @@
           - "       UBUNTU PATCHING STARTED"
           - "========================================="
           - "Server         : {{ inventory_hostname }}"
-          - "Patch Type     : {{ patch_type }}"
-          - "Reboot Allowed : {{ reboot_allowed }}"
+          - "Patch Type     : {{ patch_type | default('all') }}"
+          - "Reboot Allowed : {{ reboot_allowed | default('no') }}"
           - "========================================="
 
     - name: Get Ubuntu version
@@ -65,14 +65,14 @@
         upgrade: dist
         autoremove: true
         autoclean: true
-      when: patch_type == "all"
+      when: patch_type | default('all') == "all"
 
     - name: Upgrade available packages
       ansible.builtin.apt:
         name: "*"
         state: latest
         only_upgrade: true
-      when: patch_type == "security"
+      when: patch_type | default('all') == "security"
 
     # =========================================================
     # CHECK REBOOT
@@ -87,7 +87,7 @@
       ansible.builtin.debug:
         msg:
           - "Reboot Required : {{ reboot_required.stat.exists }}"
-          - "Reboot Allowed  : {{ reboot_allowed }}"
+          - "Reboot Allowed  : {{ reboot_allowed | default('no') }}"
 
     # =========================================================
     # REBOOT
@@ -99,12 +99,12 @@
         connect_timeout: 10
         test_command: whoami
       register: reboot_result
-      when: reboot_allowed | lower == "yes"
+      when: reboot_allowed | default('no') | lower == "yes"
 
     - name: Wait for server after reboot
       ansible.builtin.wait_for_connection:
         timeout: 300
-      when: reboot_allowed | lower == "yes"
+      when: reboot_allowed | default('no') | lower == "yes"
 
     # =========================================================
     # POST-CHECK
@@ -137,9 +137,9 @@
           - "Kernel Before    : {{ kernel_before.stdout }}"
           - "Kernel After     : {{ kernel_after.stdout }}"
           - "Reboot Required  : {{ reboot_required.stat.exists }}"
-          - "Reboot Allowed   : {{ reboot_allowed }}"
-          - "Patch Type       : {{ patch_type }}"
-          - "Reboot Performed : {{ reboot_allowed | lower == 'yes' }}"
+          - "Reboot Allowed   : {{ reboot_allowed | default('no') }}"
+          - "Patch Type       : {{ patch_type | default('all') }}"
+          - "Reboot Performed : {{ reboot_allowed | default('no') | lower == 'yes' }}"
           - "-----------------------------------------"
           - "Remaining Updates:"
           - "{{ updates_after.stdout }}"
