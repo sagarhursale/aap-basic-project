@@ -4,22 +4,75 @@
   become: true
   gather_facts: true
 
+  vars:
+    patch_type: "all"
+    reboot_allowed: "no"
+    target_server: "all"
+
   tasks:
 
-    - name: Display server information
+    # ---------------------------------------------------------
+    # PRE-CHECK
+    # ---------------------------------------------------------
+
+    - name: Display patching information
       ansible.builtin.debug:
-        msg: "Patching {{ inventory_hostname }}"
+        msg:
+          - "========================================="
+          - "Ubuntu Patching Started"
+          - "Server        : {{ inventory_hostname }}"
+          - "Patch Type    : {{ patch_type }}"
+          - "Reboot Allowed: {{ reboot_allowed }}"
+          - "========================================="
+
+    - name: Get Ubuntu version
+      ansible.builtin.command:
+        cmd: lsb_release -ds
+      register: ubuntu_version
+      changed_when: false
+
+    - name: Get running kernel
+      ansible.builtin.command:
+        cmd: uname -r
+      register: kernel_before
+      changed_when: false
+
+    - name: Display pre-check information
+      ansible.builtin.debug:
+        msg:
+          - "Ubuntu Version: {{ ubuntu_version.stdout }}"
+          - "Kernel Before : {{ kernel_before.stdout }}"
+
+    # ---------------------------------------------------------
+    # UPDATE APT CACHE
+    # ---------------------------------------------------------
 
     - name: Update APT cache
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
 
+    # ---------------------------------------------------------
+    # PATCHING
+    # ---------------------------------------------------------
+
     - name: Upgrade all packages
       ansible.builtin.apt:
         upgrade: dist
         autoremove: true
         autoclean: true
+      when: patch_type == "all"
+
+    - name: Install available security updates
+      ansible.builtin.apt:
+        name: "*"
+        state: latest
+        only_upgrade: true
+      when: patch_type == "security"
+
+    # ---------------------------------------------------------
+    # CHECK REBOOT
+    # ---------------------------------------------------------
 
     - name: Check if reboot is required
       ansible.builtin.stat:
@@ -28,12 +81,61 @@
 
     - name: Display reboot status
       ansible.builtin.debug:
-        msg: >-
-          Reboot required: {{ reboot_required.stat.exists }}
+        msg: "Reboot required: {{ reboot_required.stat.exists }}"
+
+    # ---------------------------------------------------------
+    # REBOOT
+    # ---------------------------------------------------------
 
     - name: Reboot server
       ansible.builtin.reboot:
         reboot_timeout: 600
         connect_timeout: 10
+        test_command: whoami
       when:
         - reboot_required.stat.exists
+        - reboot_allowed == "yes"
+
+    # ---------------------------------------------------------
+    # POST-CHECK
+    # ---------------------------------------------------------
+
+    - name: Wait for server to become available
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+      when:
+        - reboot_required.stat.exists
+        - reboot_allowed == "yes"
+
+    - name: Get running kernel after patching
+      ansible.builtin.command:
+        cmd: uname -r
+      register: kernel_after
+      changed_when: false
+
+    - name: Check remaining upgradable packages
+      ansible.builtin.shell:
+        cmd: apt list --upgradable 2>/dev/null
+      register: remaining_updates
+      changed_when: false
+
+    # ---------------------------------------------------------
+    # FINAL REPORT
+    # ---------------------------------------------------------
+
+    - name: Display final patch report
+      ansible.builtin.debug:
+        msg:
+          - "========================================="
+          - "       UBUNTU PATCHING REPORT"
+          - "========================================="
+          - "Server           : {{ inventory_hostname }}"
+          - "Ubuntu Version   : {{ ubuntu_version.stdout }}"
+          - "Kernel Before    : {{ kernel_before.stdout }}"
+          - "Kernel After     : {{ kernel_after.stdout }}"
+          - "Reboot Required  : {{ reboot_required.stat.exists }}"
+          - "Reboot Allowed   : {{ reboot_allowed }}"
+          - "Patch Type       : {{ patch_type }}"
+          - "Remaining Updates:"
+          - "{{ remaining_updates.stdout }}"
+          - "========================================="
