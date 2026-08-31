@@ -1,8 +1,12 @@
 ---
 - name: Ubuntu Linux Patching
-  hosts: "{{ target_hosts }}"
+  hosts: "{{ target_hosts | default('ubuntu_servers') }}"
   become: true
   gather_facts: true
+
+  vars:
+    patch_type: "{{ patch_type | default('all') }}"
+    reboot_allowed: "{{ reboot_allowed | default('no') }}"
 
   tasks:
 
@@ -65,14 +69,14 @@
         upgrade: dist
         autoremove: true
         autoclean: true
-      when: patch_type == "all"
+      when: patch_type | lower == "all"
 
     - name: Upgrade available packages
       ansible.builtin.apt:
         name: "*"
         state: latest
         only_upgrade: true
-      when: patch_type == "security"
+      when: patch_type | lower == "security"
 
     # =========================================================
     # CHECK REBOOT
