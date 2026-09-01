@@ -1,0 +1,32 @@
+---
+- name: Give Existing Ubuntu User Passwordless Sudo
+  hosts: patch_targets
+  become: true
+  gather_facts: false
+
+  tasks:
+
+    - name: Check that user exists
+      ansible.builtin.command:
+        cmd: "id {{ username }}"
+      register: user_check
+      changed_when: false
+
+    - name: Configure passwordless sudo
+      ansible.builtin.copy:
+        dest: "/etc/sudoers.d/{{ username }}"
+        content: "{{ username }} ALL=(ALL) NOPASSWD:ALL\n"
+        owner: root
+        group: root
+        mode: '0440'
+        validate: "/usr/sbin/visudo -cf %s"
+
+    - name: Verify sudo configuration
+      ansible.builtin.command:
+        cmd: "visudo -cf /etc/sudoers.d/{{ username }}"
+      register: sudo_check
+      changed_when: false
+
+    - name: Display result
+      ansible.builtin.debug:
+        msg: "Passwordless sudo configured successfully for {{ username }}"
