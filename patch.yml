@@ -1,146 +1,30 @@
 ---
-- name: Ubuntu Linux Patching
-  hosts: all
+- name: Ubuntu Patch and Reboot
+  hosts: patch_targets
   become: true
-  gather_facts: true
+  serial: 1
 
   tasks:
 
-    # =========================================================
-    # PRE-CHECK
-    # =========================================================
-
-    - name: Display patching information
-      ansible.builtin.debug:
-        msg:
-          - "========================================="
-          - "       UBUNTU PATCHING STARTED"
-          - "========================================="
-          - "Server         : {{ inventory_hostname }}"
-          - "Patch Type     : {{ patch_type | default('all') }}"
-          - "Reboot Allowed : {{ reboot_allowed | default('no') }}"
-          - "========================================="
-
-    - name: Get Ubuntu version
-      ansible.builtin.command:
-        cmd: lsb_release -ds
-      register: ubuntu_version
-      changed_when: false
-
-    - name: Get kernel version before patching
-      ansible.builtin.command:
-        cmd: uname -r
-      register: kernel_before
-      changed_when: false
-
-    - name: Check available updates before patching
-      ansible.builtin.shell:
-        cmd: apt list --upgradable 2>/dev/null
-      register: updates_before
-      changed_when: false
-
-    - name: Display pre-patching information
-      ansible.builtin.debug:
-        msg:
-          - "Ubuntu Version : {{ ubuntu_version.stdout }}"
-          - "Kernel Before  : {{ kernel_before.stdout }}"
-          - "Updates Before :"
-          - "{{ updates_before.stdout }}"
-
-    # =========================================================
-    # UPDATE APT CACHE
-    # =========================================================
-
-    - name: Update APT cache
+    - name: Update APT package cache
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
 
-    # =========================================================
-    # PATCHING
-    # =========================================================
-
-    - name: Upgrade all packages
+    - name: Upgrade Ubuntu packages
       ansible.builtin.apt:
         upgrade: dist
-        autoremove: true
-        autoclean: true
-      when: patch_type | default('all') == "all"
 
-    - name: Upgrade available packages
-      ansible.builtin.apt:
-        name: "*"
-        state: latest
-        only_upgrade: true
-      when: patch_type | default('all') == "security"
-
-    # =========================================================
-    # CHECK REBOOT
-    # =========================================================
-
-    - name: Check if reboot is required
-      ansible.builtin.stat:
-        path: /var/run/reboot-required
-      register: reboot_required
-
-    - name: Display reboot status
-      ansible.builtin.debug:
-        msg:
-          - "Reboot Required : {{ reboot_required.stat.exists }}"
-          - "Reboot Allowed  : {{ reboot_allowed | default('no') }}"
-
-    # =========================================================
-    # REBOOT
-    # =========================================================
-
-    - name: Reboot server
+    - name: Reboot target server
       ansible.builtin.reboot:
-        reboot_timeout: 600
-        connect_timeout: 10
-        test_command: whoami
-      register: reboot_result
-      when: reboot_allowed | default('no') | lower == "yes"
+        reboot_timeout: 900
+        post_reboot_delay: 30
 
-    - name: Wait for server after reboot
-      ansible.builtin.wait_for_connection:
-        timeout: 300
-      when: reboot_allowed | default('no') | lower == "yes"
-
-    # =========================================================
-    # POST-CHECK
-    # =========================================================
-
-    - name: Get kernel version after patching
-      ansible.builtin.command:
-        cmd: uname -r
-      register: kernel_after
+    - name: Check server after reboot
+      ansible.builtin.command: uptime
+      register: uptime_result
       changed_when: false
 
-    - name: Check remaining upgradable packages
-      ansible.builtin.shell:
-        cmd: apt list --upgradable 2>/dev/null
-      register: updates_after
-      changed_when: false
-
-    # =========================================================
-    # FINAL REPORT
-    # =========================================================
-
-    - name: Display final patch report
+    - name: Display uptime
       ansible.builtin.debug:
-        msg:
-          - "========================================="
-          - "       UBUNTU PATCHING REPORT"
-          - "========================================="
-          - "Server           : {{ inventory_hostname }}"
-          - "Ubuntu Version   : {{ ubuntu_version.stdout }}"
-          - "Kernel Before    : {{ kernel_before.stdout }}"
-          - "Kernel After     : {{ kernel_after.stdout }}"
-          - "Reboot Required  : {{ reboot_required.stat.exists }}"
-          - "Reboot Allowed   : {{ reboot_allowed | default('no') }}"
-          - "Patch Type       : {{ patch_type | default('all') }}"
-          - "Reboot Performed : {{ reboot_allowed | default('no') | lower == 'yes' }}"
-          - "-----------------------------------------"
-          - "Remaining Updates:"
-          - "{{ updates_after.stdout }}"
-          - "========================================="
+        msg: "{{ uptime_result.stdout }}"
