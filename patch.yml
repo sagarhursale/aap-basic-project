@@ -19,10 +19,10 @@
 
     - name: Reboot target server
       ansible.builtin.reboot:
-        reboot_timeout: 300
+        reboot_timeout: 600
         connect_timeout: 10
         pre_reboot_delay: 5
-        post_reboot_delay: 10
+        post_reboot_delay: 15
         test_command: uptime
 
     - name: Check server after reboot
