@@ -1,6 +1,6 @@
 ---
 - name: Give Existing Ubuntu User Passwordless Sudo
-  hosts: ubuntu_targets
+  hosts: patch_targets
   become: true
   gather_facts: false
 
